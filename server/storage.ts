@@ -1,38 +1,49 @@
-import { type User, type InsertUser } from "@shared/schema";
-import { randomUUID } from "crypto";
-
-// modify the interface with any CRUD methods
-// you might need
+import { phases, tasks, type Phase, type Task, type UpdateTaskRequest } from "@shared/schema";
+import { db } from "./db";
+import { eq } from "drizzle-orm";
 
 export interface IStorage {
-  getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
+  getPhases(): Promise<Phase[]>;
+  getTasks(): Promise<Task[]>;
+  getTasksByPhase(phaseId: number): Promise<Task[]>;
+  updateTask(id: number, updates: UpdateTaskRequest): Promise<Task>;
+  
+  // Internal methods for seeding
+  createPhase(phase: Omit<Phase, "id">): Promise<Phase>;
+  createTask(task: Omit<Task, "id">): Promise<Task>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<string, User>;
-
-  constructor() {
-    this.users = new Map();
+export class DatabaseStorage implements IStorage {
+  async getPhases(): Promise<Phase[]> {
+    return await db.select().from(phases).orderBy(phases.order);
   }
 
-  async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
+  async getTasks(): Promise<Task[]> {
+    return await db.select().from(tasks).orderBy(tasks.id);
   }
 
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
+  async getTasksByPhase(phaseId: number): Promise<Task[]> {
+    return await db.select().from(tasks).where(eq(tasks.phaseId, phaseId));
   }
 
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
-    return user;
+  async updateTask(id: number, updates: UpdateTaskRequest): Promise<Task> {
+    const [updated] = await db
+      .update(tasks)
+      .set(updates)
+      .where(eq(tasks.id, id))
+      .returning();
+    return updated;
+  }
+
+  async createPhase(phase: Omit<Phase, "id">): Promise<Phase> {
+    const [newPhase] = await db.insert(phases).values(phase).returning();
+    return newPhase;
+  }
+
+  async createTask(task: Omit<Task, "id">): Promise<Task> {
+    const [newTask] = await db.insert(tasks).values(task).returning();
+    return newTask;
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
