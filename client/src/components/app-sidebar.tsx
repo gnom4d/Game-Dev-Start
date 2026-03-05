@@ -1,12 +1,13 @@
 import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard, FolderKanban, Activity, ShieldCheck, Rocket,
-  LayoutTemplate, BoxSelect, Flame, CalendarClock, Users, ShieldAlert, GitBranch
+  LayoutTemplate, BoxSelect, Flame, CalendarClock, Users, ShieldAlert, GitBranch, LogOut
 } from "lucide-react";
 import { usePhases } from "@/hooks/use-phases";
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -16,6 +17,9 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useAuth } from "@/hooks/use-auth";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 
 const getPhaseIcon = (name: string) => {
   const lower = name.toLowerCase();
@@ -43,6 +47,14 @@ const APM_TOOLS = [
 export function AppSidebar() {
   const [location] = useLocation();
   const { data: phases, isLoading } = usePhases();
+  const { user, logout, isLoggingOut } = useAuth();
+
+  const userInitials = [user?.firstName, user?.lastName]
+    .filter(Boolean)
+    .map((n) => n![0])
+    .join("") || user?.email?.[0]?.toUpperCase() || "U";
+
+  const displayName = [user?.firstName, user?.lastName].filter(Boolean).join(" ") || user?.email || "User";
 
   return (
     <Sidebar className="border-r border-sidebar-border bg-sidebar-background">
@@ -124,6 +136,34 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+
+      <SidebarFooter className="p-4 border-t border-sidebar-border/50">
+        <div className="flex items-center gap-3">
+          <Avatar className="h-8 w-8 shrink-0">
+            <AvatarImage src={user?.profileImageUrl ?? undefined} alt={displayName} />
+            <AvatarFallback className="bg-primary/20 text-primary text-xs font-semibold">
+              {userInitials}
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex flex-col flex-1 min-w-0">
+            <span data-testid="text-user-name" className="text-sm font-medium text-foreground truncate">{displayName}</span>
+            {user?.email && (
+              <span className="text-[10px] text-muted-foreground truncate">{user.email}</span>
+            )}
+          </div>
+          <Button
+            data-testid="button-logout"
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+            onClick={() => logout()}
+            disabled={isLoggingOut}
+            title="Sign out"
+          >
+            <LogOut className="h-4 w-4" />
+          </Button>
+        </div>
+      </SidebarFooter>
     </Sidebar>
   );
 }

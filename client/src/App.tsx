@@ -13,9 +13,12 @@ import DepartmentPulsePage from "@/pages/department-pulse";
 import RisksPage from "@/pages/risks";
 import LiveOpsPage from "@/pages/liveops";
 import TimelinePage from "@/pages/timeline";
+import LoginPage from "@/pages/login";
 import NotFound from "@/pages/not-found";
 import { Menu } from "lucide-react";
 import React from "react";
+import { useAuth } from "@/hooks/use-auth";
+import { Skeleton } from "@/components/ui/skeleton";
 
 function Router() {
   return (
@@ -33,39 +36,66 @@ function Router() {
   );
 }
 
-function App() {
+function AuthenticatedApp() {
   const style = {
     "--sidebar-width": "18rem",
     "--sidebar-width-icon": "4rem",
   };
 
   return (
+    <SidebarProvider style={style as React.CSSProperties}>
+      <div className="flex h-screen w-full bg-background overflow-hidden selection:bg-primary/30 selection:text-primary-foreground text-foreground">
+        <AppSidebar />
+        <div className="flex flex-col flex-1 relative overflow-hidden h-full">
+          <header className="flex h-14 lg:h-0 items-center justify-between px-4 lg:px-0 lg:absolute lg:top-4 lg:left-4 z-50 border-b border-border/50 lg:border-none bg-background/80 backdrop-blur-md lg:bg-transparent">
+            <div className="flex items-center gap-2">
+              <SidebarTrigger data-testid="button-sidebar-toggle" className="hover-elevate bg-card border border-border shadow-sm text-foreground">
+                <Menu className="h-5 w-5" />
+              </SidebarTrigger>
+              <span className="lg:hidden font-display font-bold tracking-wide">Pipeline<span className="text-primary">Pro</span></span>
+            </div>
+          </header>
+          <main className="flex-1 overflow-hidden relative">
+            <div className="absolute top-0 left-0 w-full h-full pointer-events-none overflow-hidden z-0">
+              <div className="absolute top-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-primary/5 blur-[120px]" />
+              <div className="absolute bottom-[-20%] left-[-10%] w-[40%] h-[60%] rounded-full bg-accent/5 blur-[120px]" />
+            </div>
+            <div className="h-full w-full relative z-10">
+              <Router />
+            </div>
+          </main>
+        </div>
+      </div>
+    </SidebarProvider>
+  );
+}
+
+function AppContent() {
+  const { user, isLoading, isAuthenticated } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen w-full bg-background flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Skeleton className="h-16 w-16 rounded-2xl" />
+          <Skeleton className="h-4 w-32" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <LoginPage />;
+  }
+
+  return <AuthenticatedApp />;
+}
+
+function App() {
+  return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <SidebarProvider style={style as React.CSSProperties}>
-          <div className="flex h-screen w-full bg-background overflow-hidden selection:bg-primary/30 selection:text-primary-foreground text-foreground">
-            <AppSidebar />
-            <div className="flex flex-col flex-1 relative overflow-hidden h-full">
-              <header className="flex h-14 lg:h-0 items-center justify-between px-4 lg:px-0 lg:absolute lg:top-4 lg:left-4 z-50 border-b border-border/50 lg:border-none bg-background/80 backdrop-blur-md lg:bg-transparent">
-                <div className="flex items-center gap-2">
-                  <SidebarTrigger data-testid="button-sidebar-toggle" className="hover-elevate bg-card border border-border shadow-sm text-foreground">
-                    <Menu className="h-5 w-5" />
-                  </SidebarTrigger>
-                  <span className="lg:hidden font-display font-bold tracking-wide">Pipeline<span className="text-primary">Pro</span></span>
-                </div>
-              </header>
-              <main className="flex-1 overflow-hidden relative">
-                <div className="absolute top-0 left-0 w-full h-full pointer-events-none overflow-hidden z-0">
-                  <div className="absolute top-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-primary/5 blur-[120px]" />
-                  <div className="absolute bottom-[-20%] left-[-10%] w-[40%] h-[60%] rounded-full bg-accent/5 blur-[120px]" />
-                </div>
-                <div className="h-full w-full relative z-10">
-                  <Router />
-                </div>
-              </main>
-            </div>
-          </div>
-        </SidebarProvider>
+        <AppContent />
         <Toaster />
       </TooltipProvider>
     </QueryClientProvider>

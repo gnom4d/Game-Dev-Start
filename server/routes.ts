@@ -12,11 +12,20 @@ import {
   insertPostMortemSchema,
   insertTimelineEventSchema,
 } from "@shared/schema";
+import { isAuthenticated, registerAuthRoutes } from "./replit_integrations/auth";
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+
+  registerAuthRoutes(app);
+
+  app.use("/api", (req, res, next) => {
+    const publicPaths = ["/login", "/callback", "/logout"];
+    if (publicPaths.includes(req.path)) return next();
+    return isAuthenticated(req, res, next);
+  });
 
   app.get(api.phases.list.path, async (req, res) => {
     const phases = await storage.getPhases();
