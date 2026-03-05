@@ -1,14 +1,16 @@
 import {
-  phases, tasks, blockers, departmentPulse, risks, liveopsLogs, milestoneBuffers,
+  phases, tasks, blockers, departmentPulse, risks, liveopsLogs, milestoneBuffers, postMortems, timelineEvents,
   type Phase, type Task, type UpdateTaskRequest,
   type Blocker, type InsertBlocker,
   type DepartmentPulse, type InsertDepartmentPulse,
   type Risk, type InsertRisk,
   type LiveopsLog, type InsertLiveopsLog,
   type MilestoneBuffer, type InsertMilestoneBuffer,
+  type PostMortem, type InsertPostMortem,
+  type TimelineEvent, type InsertTimelineEvent,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, asc } from "drizzle-orm";
 
 export interface IStorage {
   getPhases(): Promise<Phase[]>;
@@ -18,33 +20,37 @@ export interface IStorage {
   createPhase(phase: Omit<Phase, "id">): Promise<Phase>;
   createTask(task: Omit<Task, "id">): Promise<Task>;
 
-  // Blockers
   getBlockers(): Promise<Blocker[]>;
   createBlocker(blocker: InsertBlocker): Promise<Blocker>;
   updateBlocker(id: number, updates: Partial<InsertBlocker & { resolvedAt: Date | null }>): Promise<Blocker>;
   deleteBlocker(id: number): Promise<void>;
 
-  // Department Pulse
   getDepartmentPulse(): Promise<DepartmentPulse[]>;
   createDepartmentPulse(entry: InsertDepartmentPulse): Promise<DepartmentPulse>;
   deleteDepartmentPulse(id: number): Promise<void>;
 
-  // Risks
   getRisks(): Promise<Risk[]>;
   createRisk(risk: InsertRisk): Promise<Risk>;
-  updateRisk(id: number, updates: Partial<InsertRisk>): Promise<Risk>;
+  updateRisk(id: number, updates: Partial<Risk>): Promise<Risk>;
   deleteRisk(id: number): Promise<void>;
 
-  // LiveOps Logs
   getLiveopsLogs(): Promise<LiveopsLog[]>;
   createLiveopsLog(log: InsertLiveopsLog): Promise<LiveopsLog>;
   deleteLiveopsLog(id: number): Promise<void>;
 
-  // Milestone Buffers
   getMilestoneBuffers(): Promise<MilestoneBuffer[]>;
   createMilestoneBuffer(buffer: InsertMilestoneBuffer): Promise<MilestoneBuffer>;
   updateMilestoneBuffer(id: number, updates: Partial<InsertMilestoneBuffer>): Promise<MilestoneBuffer>;
   deleteMilestoneBuffer(id: number): Promise<void>;
+
+  getPostMortems(): Promise<PostMortem[]>;
+  getPostMortemsByPhase(phaseId: number): Promise<PostMortem[]>;
+  createPostMortem(entry: InsertPostMortem): Promise<PostMortem>;
+  deletePostMortem(id: number): Promise<void>;
+
+  getTimelineEvents(): Promise<TimelineEvent[]>;
+  createTimelineEvent(event: InsertTimelineEvent): Promise<TimelineEvent>;
+  deleteTimelineEvent(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -75,7 +81,6 @@ export class DatabaseStorage implements IStorage {
     return newTask;
   }
 
-  // Blockers
   async getBlockers(): Promise<Blocker[]> {
     return await db.select().from(blockers).orderBy(desc(blockers.createdAt));
   }
@@ -94,7 +99,6 @@ export class DatabaseStorage implements IStorage {
     await db.delete(blockers).where(eq(blockers.id, id));
   }
 
-  // Department Pulse
   async getDepartmentPulse(): Promise<DepartmentPulse[]> {
     return await db.select().from(departmentPulse).orderBy(departmentPulse.weekOf);
   }
@@ -108,7 +112,6 @@ export class DatabaseStorage implements IStorage {
     await db.delete(departmentPulse).where(eq(departmentPulse.id, id));
   }
 
-  // Risks
   async getRisks(): Promise<Risk[]> {
     return await db.select().from(risks).orderBy(desc(risks.createdAt));
   }
@@ -118,7 +121,7 @@ export class DatabaseStorage implements IStorage {
     return newRisk;
   }
 
-  async updateRisk(id: number, updates: Partial<InsertRisk>): Promise<Risk> {
+  async updateRisk(id: number, updates: Partial<Risk>): Promise<Risk> {
     const [updated] = await db.update(risks).set(updates).where(eq(risks.id, id)).returning();
     return updated;
   }
@@ -127,7 +130,6 @@ export class DatabaseStorage implements IStorage {
     await db.delete(risks).where(eq(risks.id, id));
   }
 
-  // LiveOps Logs
   async getLiveopsLogs(): Promise<LiveopsLog[]> {
     return await db.select().from(liveopsLogs).orderBy(desc(liveopsLogs.createdAt));
   }
@@ -141,7 +143,6 @@ export class DatabaseStorage implements IStorage {
     await db.delete(liveopsLogs).where(eq(liveopsLogs.id, id));
   }
 
-  // Milestone Buffers
   async getMilestoneBuffers(): Promise<MilestoneBuffer[]> {
     return await db.select().from(milestoneBuffers).orderBy(milestoneBuffers.id);
   }
@@ -158,6 +159,36 @@ export class DatabaseStorage implements IStorage {
 
   async deleteMilestoneBuffer(id: number): Promise<void> {
     await db.delete(milestoneBuffers).where(eq(milestoneBuffers.id, id));
+  }
+
+  async getPostMortems(): Promise<PostMortem[]> {
+    return await db.select().from(postMortems).orderBy(asc(postMortems.createdAt));
+  }
+
+  async getPostMortemsByPhase(phaseId: number): Promise<PostMortem[]> {
+    return await db.select().from(postMortems).where(eq(postMortems.phaseId, phaseId)).orderBy(asc(postMortems.createdAt));
+  }
+
+  async createPostMortem(entry: InsertPostMortem): Promise<PostMortem> {
+    const [newEntry] = await db.insert(postMortems).values(entry).returning();
+    return newEntry;
+  }
+
+  async deletePostMortem(id: number): Promise<void> {
+    await db.delete(postMortems).where(eq(postMortems.id, id));
+  }
+
+  async getTimelineEvents(): Promise<TimelineEvent[]> {
+    return await db.select().from(timelineEvents).orderBy(desc(timelineEvents.occurredAt));
+  }
+
+  async createTimelineEvent(event: InsertTimelineEvent): Promise<TimelineEvent> {
+    const [newEvent] = await db.insert(timelineEvents).values(event).returning();
+    return newEvent;
+  }
+
+  async deleteTimelineEvent(id: number): Promise<void> {
+    await db.delete(timelineEvents).where(eq(timelineEvents.id, id));
   }
 }
 

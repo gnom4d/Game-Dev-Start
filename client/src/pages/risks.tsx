@@ -10,7 +10,10 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { ShieldAlert, Plus, X, ExternalLink, CheckCircle, AlertTriangle, ArrowRight } from "lucide-react";
+import {
+  ShieldAlert, Plus, X, ExternalLink, CheckCircle, AlertTriangle, ArrowRight,
+  Archive, ChevronDown, ChevronRight, Lock
+} from "lucide-react";
 import { Link } from "wouter";
 import type { Risk } from "@shared/schema";
 
@@ -21,18 +24,118 @@ const SEVERITY_CONFIG: Record<string, { label: string; color: string; bg: string
   critical: { label: "Critical", color: "text-destructive",  bg: "bg-destructive/10",  border: "border-destructive/30" },
 };
 
-const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
-  open:      { label: "Open",      color: "text-chart-5" },
-  mitigated: { label: "Mitigated", color: "text-chart-4" },
-  closed:    { label: "Closed",    color: "text-chart-3" },
+const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
+  open:      { label: "Open",      color: "text-chart-5",  bg: "bg-chart-5/10" },
+  mitigated: { label: "Mitigated", color: "text-chart-4",  bg: "bg-chart-4/10" },
+  closed:    { label: "Closed",    color: "text-chart-3",  bg: "bg-chart-3/10" },
 };
+
+function RiskCard({
+  risk,
+  phaseList,
+  onStatusChange,
+  onDelete,
+  archived = false,
+}: {
+  risk: Risk;
+  phaseList: { id: number; name: string }[];
+  onStatusChange: (id: number, status: string) => void;
+  onDelete: (id: number) => void;
+  archived?: boolean;
+}) {
+  const sevCfg = SEVERITY_CONFIG[risk.severity] || SEVERITY_CONFIG.medium;
+  const statusCfg = STATUS_CONFIG[risk.status] || STATUS_CONFIG.open;
+  const linkedPhase = phaseList.find(p => p.id === risk.linkedPhaseId);
+
+  return (
+    <Card
+      data-testid={`risk-card-${risk.id}`}
+      className={`glass-panel border shadow-xl shadow-black/20 ${sevCfg.border} ${archived ? "opacity-75" : ""}`}
+    >
+      <CardContent className="pt-5 pb-5">
+        <div className="flex items-start gap-4">
+          <div className={`mt-0.5 px-2.5 py-1 rounded-md text-xs font-bold ${sevCfg.bg} ${sevCfg.color} shrink-0`}>
+            {sevCfg.label}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between gap-3 mb-2">
+              <h3 className="font-display font-semibold text-foreground text-base leading-snug">{risk.title}</h3>
+              <div className="flex items-center gap-2 shrink-0">
+                {archived ? (
+                  <span className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-md ${statusCfg.bg} ${statusCfg.color}`}>
+                    <Lock className="w-3 h-3" />
+                    {statusCfg.label}
+                  </span>
+                ) : (
+                  <Select
+                    value={risk.status}
+                    onValueChange={v => onStatusChange(risk.id, v)}
+                  >
+                    <SelectTrigger data-testid={`select-risk-status-${risk.id}`} className="h-7 text-xs w-28">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="open">Open</SelectItem>
+                      <SelectItem value="mitigated">Mitigated</SelectItem>
+                      <SelectItem value="closed">Closed</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  data-testid={`button-delete-risk-${risk.id}`}
+                  onClick={() => onDelete(risk.id)}
+                  className="h-7 w-7 p-0 text-muted-foreground/50 hover:text-destructive"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            </div>
+
+            <p className="text-sm text-muted-foreground mb-3 leading-relaxed">{risk.description}</p>
+
+            {risk.notes && (
+              <div className={`border border-border/40 rounded-lg px-3 py-2 mb-3 ${archived ? "bg-chart-3/5 border-chart-3/20" : "bg-muted/20"}`}>
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">
+                  {archived ? "How it was resolved" : "Mitigation Notes"}
+                </p>
+                <p className="text-sm text-foreground/80 leading-relaxed">{risk.notes}</p>
+              </div>
+            )}
+
+            {archived && risk.resolvedAt && (
+              <p className="text-xs text-muted-foreground mb-2">
+                Resolved: {new Date(risk.resolvedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+              </p>
+            )}
+
+            {linkedPhase && (
+              <Link href={`/phases/${linkedPhase.id}`}>
+                <div
+                  data-testid={`link-risk-phase-${risk.id}`}
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 bg-primary/10 hover:bg-primary/20 px-3 py-1.5 rounded-full cursor-pointer transition-colors"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  View in Pipeline: {linkedPhase.name}
+                  <ArrowRight className="w-3 h-3" />
+                </div>
+              </Link>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function RisksPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: phases } = usePhases();
   const [showForm, setShowForm] = useState(false);
-  const [filterStatus, setFilterStatus] = useState("all");
+  const [filterStatus, setFilterStatus] = useState("open");
+  const [showArchive, setShowArchive] = useState(false);
   const [form, setForm] = useState({
     title: "",
     description: "",
@@ -84,7 +187,13 @@ export default function RisksPage() {
       if (!res.ok) throw new Error('Failed to update risk');
       return res.json();
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/risks'] }),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/risks'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/timeline-events'] });
+      if (data.status === "mitigated" || data.status === "closed") {
+        toast({ title: "Risk resolved", description: "A timeline entry has been created." });
+      }
+    },
   });
 
   const deleteMutation = useMutation({
@@ -105,7 +214,9 @@ export default function RisksPage() {
 
   const phaseList = phases?.sort((a, b) => a.order - b.order) || [];
   const allRisks = risks || [];
-  const filteredRisks = filterStatus === "all" ? allRisks : allRisks.filter(r => r.status === filterStatus);
+  const activeRisks = allRisks.filter(r => r.status === "open");
+  const archivedRisks = allRisks.filter(r => r.status === "mitigated" || r.status === "closed");
+  const filteredActive = filterStatus === "all" ? activeRisks : activeRisks.filter(r => r.status === filterStatus);
 
   const openCount = allRisks.filter(r => r.status === "open").length;
   const mitigatedCount = allRisks.filter(r => r.status === "mitigated").length;
@@ -213,10 +324,10 @@ export default function RisksPage() {
                 />
               </div>
               <div className="space-y-2 md:col-span-2">
-                <Label>Mitigation Notes</Label>
+                <Label>Mitigation Notes / Resolution</Label>
                 <Textarea
                   data-testid="input-risk-notes"
-                  placeholder="What actions are being taken?"
+                  placeholder="What actions are being taken? How was it resolved?"
                   value={form.notes}
                   onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
                   rows={2}
@@ -237,106 +348,76 @@ export default function RisksPage() {
         </Card>
       )}
 
-      {/* Filters */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <span className="text-sm text-muted-foreground font-medium">Filter:</span>
-        {["all", "open", "mitigated", "closed"].map(f => (
-          <Button
-            key={f}
-            size="sm"
-            variant={filterStatus === f ? "default" : "ghost"}
-            data-testid={`filter-risk-${f}`}
-            onClick={() => setFilterStatus(f)}
-            className="capitalize h-8"
-          >
-            {f === "all" ? "All" : f}
-          </Button>
-        ))}
-      </div>
+      {/* Active Risks */}
+      <div>
+        <div className="flex items-center gap-3 flex-wrap mb-5">
+          <h2 className="text-lg font-display font-bold text-foreground flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5 text-chart-5" /> Active Risks
+            <Badge variant="outline" className="text-xs">{openCount}</Badge>
+          </h2>
+        </div>
 
-      {/* Risk Cards */}
-      <div className="space-y-4">
-        {filteredRisks.length === 0 ? (
-          <div className="text-center py-16 bg-card/30 border border-dashed border-border/50 rounded-2xl">
-            <ShieldAlert className="w-12 h-12 text-muted-foreground mx-auto mb-3 opacity-30" />
-            <h3 className="text-lg font-semibold text-foreground">No risks logged</h3>
-            <p className="text-muted-foreground">Add a risk to start tracking</p>
-          </div>
-        ) : (
-          filteredRisks.map(risk => {
-            const sevCfg = SEVERITY_CONFIG[risk.severity] || SEVERITY_CONFIG.medium;
-            const statusCfg = STATUS_CONFIG[risk.status] || STATUS_CONFIG.open;
-            const linkedPhase = phaseList.find(p => p.id === risk.linkedPhaseId);
-
-            return (
-              <Card
+        <div className="space-y-4">
+          {activeRisks.length === 0 ? (
+            <div className="text-center py-12 bg-card/30 border border-dashed border-border/50 rounded-2xl">
+              <CheckCircle className="w-10 h-10 text-chart-3 mx-auto mb-3 opacity-50" />
+              <h3 className="text-base font-semibold text-foreground">No open risks</h3>
+              <p className="text-muted-foreground text-sm">All risks have been resolved or none have been logged.</p>
+            </div>
+          ) : (
+            activeRisks.map(risk => (
+              <RiskCard
                 key={risk.id}
-                data-testid={`risk-card-${risk.id}`}
-                className={`glass-panel border shadow-xl shadow-black/20 ${sevCfg.border}`}
-              >
-                <CardContent className="pt-5 pb-5">
-                  <div className="flex items-start gap-4">
-                    <div className={`mt-0.5 px-2.5 py-1 rounded-md text-xs font-bold ${sevCfg.bg} ${sevCfg.color} shrink-0`}>
-                      {sevCfg.label}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-3 mb-2">
-                        <h3 className="font-display font-semibold text-foreground text-base leading-snug">{risk.title}</h3>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <Select
-                            value={risk.status}
-                            onValueChange={v => updateMutation.mutate({ id: risk.id, updates: { status: v } })}
-                          >
-                            <SelectTrigger data-testid={`select-risk-status-${risk.id}`} className="h-7 text-xs w-28">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="open">Open</SelectItem>
-                              <SelectItem value="mitigated">Mitigated</SelectItem>
-                              <SelectItem value="closed">Closed</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            data-testid={`button-delete-risk-${risk.id}`}
-                            onClick={() => deleteMutation.mutate(risk.id)}
-                            className="h-7 w-7 p-0 text-muted-foreground/50 hover:text-destructive"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </Button>
-                        </div>
-                      </div>
-
-                      <p className="text-sm text-muted-foreground mb-3 leading-relaxed">{risk.description}</p>
-
-                      {risk.notes && (
-                        <div className="bg-muted/20 border border-border/40 rounded-lg px-3 py-2 mb-3">
-                          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Mitigation Notes</p>
-                          <p className="text-sm text-foreground/80">{risk.notes}</p>
-                        </div>
-                      )}
-
-                      {linkedPhase && (
-                        <Link href={`/phases/${linkedPhase.id}`}>
-                          <div
-                            data-testid={`link-risk-phase-${risk.id}`}
-                            className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 bg-primary/10 hover:bg-primary/20 px-3 py-1.5 rounded-full cursor-pointer transition-colors"
-                          >
-                            <ExternalLink className="w-3 h-3" />
-                            View in Pipeline: {linkedPhase.name}
-                            <ArrowRight className="w-3 h-3" />
-                          </div>
-                        </Link>
-                      )}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })
-        )}
+                risk={risk}
+                phaseList={phaseList}
+                onStatusChange={(id, status) => updateMutation.mutate({ id, updates: { status } })}
+                onDelete={id => deleteMutation.mutate(id)}
+              />
+            ))
+          )}
+        </div>
       </div>
+
+      {/* Mitigated Archive — toggleable */}
+      {archivedRisks.length > 0 && (
+        <div>
+          <button
+            data-testid="button-toggle-archive"
+            onClick={() => setShowArchive(v => !v)}
+            className="flex items-center gap-3 w-full text-left group mb-4"
+          >
+            <div className="flex items-center gap-2 px-4 py-3 rounded-xl border border-border/50 bg-card/30 hover:bg-card/50 transition-colors w-full">
+              {showArchive ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
+              <Archive className="w-4 h-4 text-chart-3" />
+              <span className="font-display font-semibold text-foreground">Mitigated Archive</span>
+              <Badge className="ml-1 bg-chart-3/15 text-chart-3 border-chart-3/30 text-xs">
+                {archivedRisks.length} resolved
+              </Badge>
+              <span className="ml-auto text-xs text-muted-foreground">
+                {showArchive ? "Click to collapse" : "Click to expand"}
+              </span>
+            </div>
+          </button>
+
+          {showArchive && (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground px-1">
+                These risks have been mitigated or closed. The "How it was resolved" notes are preserved for reference.
+              </p>
+              {archivedRisks.map(risk => (
+                <RiskCard
+                  key={risk.id}
+                  risk={risk}
+                  phaseList={phaseList}
+                  onStatusChange={(id, status) => updateMutation.mutate({ id, updates: { status } })}
+                  onDelete={id => deleteMutation.mutate(id)}
+                  archived
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

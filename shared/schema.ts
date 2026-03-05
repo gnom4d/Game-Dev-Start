@@ -46,6 +46,7 @@ export const risks = pgTable("risks", {
   severity: text("severity").notNull().default("medium"),
   status: text("status").notNull().default("open"),
   notes: text("notes").default(""),
+  resolvedAt: timestamp("resolved_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -68,13 +69,34 @@ export const milestoneBuffers = pgTable("milestone_buffers", {
   notes: text("notes").default(""),
 });
 
+export const postMortems = pgTable("post_mortems", {
+  id: serial("id").primaryKey(),
+  phaseId: integer("phase_id").notNull(),
+  type: text("type").notNull().default("lesson"),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const timelineEvents = pgTable("timeline_events", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  description: text("description").default(""),
+  phaseId: integer("phase_id"),
+  eventType: text("event_type").notNull().default("milestone"),
+  sourceType: text("source_type"),
+  sourceId: integer("source_id"),
+  occurredAt: timestamp("occurred_at").defaultNow().notNull(),
+});
+
 export const insertPhaseSchema = createInsertSchema(phases).omit({ id: true });
 export const insertTaskSchema = createInsertSchema(tasks).omit({ id: true });
 export const insertBlockerSchema = createInsertSchema(blockers).omit({ id: true, createdAt: true });
 export const insertDepartmentPulseSchema = createInsertSchema(departmentPulse).omit({ id: true });
-export const insertRiskSchema = createInsertSchema(risks).omit({ id: true, createdAt: true });
+export const insertRiskSchema = createInsertSchema(risks).omit({ id: true, createdAt: true, resolvedAt: true });
 export const insertLiveopsLogSchema = createInsertSchema(liveopsLogs).omit({ id: true, createdAt: true });
 export const insertMilestoneBufferSchema = createInsertSchema(milestoneBuffers).omit({ id: true });
+export const insertPostMortemSchema = createInsertSchema(postMortems).omit({ id: true, createdAt: true });
+export const insertTimelineEventSchema = createInsertSchema(timelineEvents).omit({ id: true });
 
 export type Phase = typeof phases.$inferSelect;
 export type InsertPhase = z.infer<typeof insertPhaseSchema>;
@@ -97,3 +119,9 @@ export type InsertLiveopsLog = z.infer<typeof insertLiveopsLogSchema>;
 
 export type MilestoneBuffer = typeof milestoneBuffers.$inferSelect;
 export type InsertMilestoneBuffer = z.infer<typeof insertMilestoneBufferSchema>;
+
+export type PostMortem = typeof postMortems.$inferSelect;
+export type InsertPostMortem = z.infer<typeof insertPostMortemSchema>;
+
+export type TimelineEvent = typeof timelineEvents.$inferSelect;
+export type InsertTimelineEvent = z.infer<typeof insertTimelineEventSchema>;

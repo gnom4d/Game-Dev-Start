@@ -12,6 +12,7 @@ import MilestonesPage from "@/pages/milestones";
 import DepartmentPulsePage from "@/pages/department-pulse";
 import RisksPage from "@/pages/risks";
 import LiveOpsPage from "@/pages/liveops";
+import TimelinePage from "@/pages/timeline";
 import NotFound from "@/pages/not-found";
 import { Menu } from "lucide-react";
 import React from "react";
@@ -26,6 +27,7 @@ function Router() {
       <Route path="/department-pulse" component={DepartmentPulsePage}/>
       <Route path="/risks" component={RisksPage}/>
       <Route path="/liveops" component={LiveOpsPage}/>
+      <Route path="/timeline" component={TimelinePage}/>
       <Route component={NotFound} />
     </Switch>
   );

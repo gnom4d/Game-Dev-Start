@@ -1,7 +1,7 @@
 import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard, FolderKanban, Activity, ShieldCheck, Rocket,
-  LayoutTemplate, BoxSelect, Flame, CalendarClock, Users, ShieldAlert
+  LayoutTemplate, BoxSelect, Flame, CalendarClock, Users, ShieldAlert, GitBranch
 } from "lucide-react";
 import { usePhases } from "@/hooks/use-phases";
 import {
@@ -37,6 +37,7 @@ const APM_TOOLS = [
   { href: "/department-pulse", label: "Department Pulse",  icon: Users },
   { href: "/risks",            label: "Risk Register",     icon: ShieldAlert },
   { href: "/liveops",          label: "LiveOps",           icon: Rocket },
+  { href: "/timeline",         label: "Timeline",          icon: GitBranch },
 ];
 
 export function AppSidebar() {

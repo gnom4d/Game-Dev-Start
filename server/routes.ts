@@ -9,6 +9,8 @@ import {
   insertRiskSchema,
   insertLiveopsLogSchema,
   insertMilestoneBufferSchema,
+  insertPostMortemSchema,
+  insertTimelineEventSchema,
 } from "@shared/schema";
 
 export async function registerRoutes(
@@ -28,9 +30,7 @@ export async function registerRoutes(
 
   app.get(api.tasks.listByPhase.path, async (req, res) => {
     const phaseId = Number(req.params.phaseId);
-    if (isNaN(phaseId)) {
-      return res.status(400).json({ message: "Invalid phase ID" });
-    }
+    if (isNaN(phaseId)) return res.status(400).json({ message: "Invalid phase ID" });
     const tasks = await storage.getTasksByPhase(phaseId);
     res.status(200).json(tasks);
   });
@@ -38,30 +38,20 @@ export async function registerRoutes(
   app.patch(api.tasks.update.path, async (req, res) => {
     try {
       const taskId = Number(req.params.id);
-      if (isNaN(taskId)) {
-        return res.status(400).json({ message: "Invalid task ID" });
-      }
+      if (isNaN(taskId)) return res.status(400).json({ message: "Invalid task ID" });
       const input = api.tasks.update.input.parse(req.body);
       const updatedTask = await storage.updateTask(taskId, input);
-      if (!updatedTask) {
-        return res.status(404).json({ message: "Task not found" });
-      }
+      if (!updatedTask) return res.status(404).json({ message: "Task not found" });
       res.status(200).json(updatedTask);
     } catch (err) {
-      if (err instanceof z.ZodError) {
-        return res.status(400).json({
-          message: err.errors[0].message,
-          field: err.errors[0].path.join('.'),
-        });
-      }
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join('.') });
       throw err;
     }
   });
 
   // Blockers
   app.get('/api/blockers', async (req, res) => {
-    const data = await storage.getBlockers();
-    res.json(data);
+    res.json(await storage.getBlockers());
   });
   app.post('/api/blockers', async (req, res) => {
     try {
@@ -77,6 +67,20 @@ export async function registerRoutes(
     const id = Number(req.params.id);
     if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
     const updated = await storage.updateBlocker(id, req.body);
+    // If resolving a blocker, create a timeline event
+    if (req.body.resolvedAt && updated) {
+      const phases = await storage.getPhases();
+      const phase = phases.find(p => p.id === updated.phaseId);
+      await storage.createTimelineEvent({
+        title: `Blocker Cleared`,
+        description: `"${updated.source}" reported by ${updated.author} was resolved.`,
+        phaseId: updated.phaseId,
+        eventType: "blocker-resolved",
+        sourceType: "blocker",
+        sourceId: updated.id,
+        occurredAt: new Date(),
+      });
+    }
     res.json(updated);
   });
   app.delete('/api/blockers/:id', async (req, res) => {
@@ -86,8 +90,7 @@ export async function registerRoutes(
 
   // Department Pulse
   app.get('/api/department-pulse', async (req, res) => {
-    const data = await storage.getDepartmentPulse();
-    res.json(data);
+    res.json(await storage.getDepartmentPulse());
   });
   app.post('/api/department-pulse', async (req, res) => {
     try {
@@ -106,8 +109,7 @@ export async function registerRoutes(
 
   // Risks
   app.get('/api/risks', async (req, res) => {
-    const data = await storage.getRisks();
-    res.json(data);
+    res.json(await storage.getRisks());
   });
   app.post('/api/risks', async (req, res) => {
     try {
@@ -122,7 +124,26 @@ export async function registerRoutes(
   app.patch('/api/risks/:id', async (req, res) => {
     const id = Number(req.params.id);
     if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
-    const updated = await storage.updateRisk(id, req.body);
+    const existing = (await storage.getRisks()).find(r => r.id === id);
+    const updates = { ...req.body };
+    // Auto-set resolvedAt when status transitions to mitigated or closed
+    if ((updates.status === "mitigated" || updates.status === "closed") && existing && existing.status === "open") {
+      updates.resolvedAt = new Date();
+    }
+    const updated = await storage.updateRisk(id, updates);
+    // Create a timeline event when a risk is closed/mitigated
+    if (updates.resolvedAt && updated) {
+      const statusLabel = updated.status === "mitigated" ? "Mitigated" : "Closed";
+      await storage.createTimelineEvent({
+        title: `Risk ${statusLabel}`,
+        description: `"${updated.title}" has been ${statusLabel.toLowerCase()}.${updated.notes ? ' Resolution: ' + updated.notes : ''}`,
+        phaseId: updated.linkedPhaseId || null,
+        eventType: "risk-resolved",
+        sourceType: "risk",
+        sourceId: updated.id,
+        occurredAt: new Date(),
+      });
+    }
     res.json(updated);
   });
   app.delete('/api/risks/:id', async (req, res) => {
@@ -132,8 +153,7 @@ export async function registerRoutes(
 
   // LiveOps Logs
   app.get('/api/liveops-logs', async (req, res) => {
-    const data = await storage.getLiveopsLogs();
-    res.json(data);
+    res.json(await storage.getLiveopsLogs());
   });
   app.post('/api/liveops-logs', async (req, res) => {
     try {
@@ -152,13 +172,26 @@ export async function registerRoutes(
 
   // Milestone Buffers
   app.get('/api/milestone-buffers', async (req, res) => {
-    const data = await storage.getMilestoneBuffers();
-    res.json(data);
+    res.json(await storage.getMilestoneBuffers());
   });
   app.post('/api/milestone-buffers', async (req, res) => {
     try {
       const input = insertMilestoneBufferSchema.parse(req.body);
       const created = await storage.createMilestoneBuffer(input);
+      // If created as on-track, log a timeline event
+      if (created.status === "on-track") {
+        const tasks = await storage.getTasks();
+        const task = tasks.find(t => t.id === created.taskId);
+        await storage.createTimelineEvent({
+          title: `Milestone On Track`,
+          description: `Task "${task?.title || `#${created.taskId}`}" confirmed on schedule.`,
+          phaseId: created.productionPhaseId,
+          eventType: "milestone",
+          sourceType: "milestone",
+          sourceId: created.id,
+          occurredAt: new Date(),
+        });
+      }
       res.status(201).json(created);
     } catch (err) {
       if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
@@ -168,7 +201,22 @@ export async function registerRoutes(
   app.patch('/api/milestone-buffers/:id', async (req, res) => {
     const id = Number(req.params.id);
     if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+    const existing = (await storage.getMilestoneBuffers()).find(m => m.id === id);
     const updated = await storage.updateMilestoneBuffer(id, req.body);
+    // If transitioning from slipping/at-risk to on-track, create a timeline green flag
+    if (req.body.status === "on-track" && existing && existing.status !== "on-track") {
+      const tasksList = await storage.getTasks();
+      const task = tasksList.find(t => t.id === updated.taskId);
+      await storage.createTimelineEvent({
+        title: `Major Hurdle Cleared`,
+        description: `Milestone "${task?.title || `#${updated.taskId}`}" recovered from ${existing.status} back to on-track.`,
+        phaseId: updated.productionPhaseId,
+        eventType: "milestone",
+        sourceType: "milestone",
+        sourceId: updated.id,
+        occurredAt: new Date(),
+      });
+    }
     res.json(updated);
   });
   app.delete('/api/milestone-buffers/:id', async (req, res) => {
@@ -176,9 +224,62 @@ export async function registerRoutes(
     res.status(204).send();
   });
 
-  // Seed data on startup
-  seedDatabase().catch(console.error);
+  // Post Mortems
+  app.get('/api/post-mortems', async (req, res) => {
+    res.json(await storage.getPostMortems());
+  });
+  app.get('/api/post-mortems/phase/:phaseId', async (req, res) => {
+    const phaseId = Number(req.params.phaseId);
+    if (isNaN(phaseId)) return res.status(400).json({ message: "Invalid phase ID" });
+    res.json(await storage.getPostMortemsByPhase(phaseId));
+  });
+  app.post('/api/post-mortems', async (req, res) => {
+    try {
+      const input = insertPostMortemSchema.parse(req.body);
+      const created = await storage.createPostMortem(input);
+      // Create a timeline event for post-mortem lesson
+      if (input.type === "lesson") {
+        await storage.createTimelineEvent({
+          title: `Lesson Learned`,
+          description: input.content.substring(0, 200),
+          phaseId: input.phaseId,
+          eventType: "post-mortem",
+          sourceType: "post-mortem",
+          sourceId: created.id,
+          occurredAt: new Date(),
+        });
+      }
+      res.status(201).json(created);
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
+      throw err;
+    }
+  });
+  app.delete('/api/post-mortems/:id', async (req, res) => {
+    await storage.deletePostMortem(Number(req.params.id));
+    res.status(204).send();
+  });
 
+  // Timeline Events
+  app.get('/api/timeline-events', async (req, res) => {
+    res.json(await storage.getTimelineEvents());
+  });
+  app.post('/api/timeline-events', async (req, res) => {
+    try {
+      const input = insertTimelineEventSchema.parse(req.body);
+      const created = await storage.createTimelineEvent(input);
+      res.status(201).json(created);
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
+      throw err;
+    }
+  });
+  app.delete('/api/timeline-events/:id', async (req, res) => {
+    await storage.deleteTimelineEvent(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  seedDatabase().catch(console.error);
   return httpServer;
 }
 
