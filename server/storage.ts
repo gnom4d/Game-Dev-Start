@@ -1,29 +1,50 @@
-import { 
-  phases, tasks, blockers, pulseTracker, risks, liveOpsFeedback,
+import {
+  phases, tasks, blockers, departmentPulse, risks, liveopsLogs, milestoneBuffers,
   type Phase, type Task, type UpdateTaskRequest,
-  type Blocker, type PulseValue, type Risk, type LiveOpsFeedback
+  type Blocker, type InsertBlocker,
+  type DepartmentPulse, type InsertDepartmentPulse,
+  type Risk, type InsertRisk,
+  type LiveopsLog, type InsertLiveopsLog,
+  type MilestoneBuffer, type InsertMilestoneBuffer,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 
 export interface IStorage {
   getPhases(): Promise<Phase[]>;
   getTasks(): Promise<Task[]>;
   getTasksByPhase(phaseId: number): Promise<Task[]>;
   updateTask(id: number, updates: UpdateTaskRequest): Promise<Task>;
-  
-  getBlockers(): Promise<Blocker[]>;
-  getPulseData(): Promise<PulseValue[]>;
-  getRisks(): Promise<Risk[]>;
-  getLiveOpsFeedback(): Promise<LiveOpsFeedback[]>;
-
-  // Internal methods for seeding
   createPhase(phase: Omit<Phase, "id">): Promise<Phase>;
   createTask(task: Omit<Task, "id">): Promise<Task>;
-  createBlocker(blocker: Omit<Blocker, "id">): Promise<Blocker>;
-  createPulse(pulse: Omit<PulseValue, "id">): Promise<PulseValue>;
-  createRisk(risk: Omit<Risk, "id">): Promise<Risk>;
-  createLiveOps(feedback: Omit<LiveOpsFeedback, "id">): Promise<LiveOpsFeedback>;
+
+  // Blockers
+  getBlockers(): Promise<Blocker[]>;
+  createBlocker(blocker: InsertBlocker): Promise<Blocker>;
+  updateBlocker(id: number, updates: Partial<InsertBlocker & { resolvedAt: Date | null }>): Promise<Blocker>;
+  deleteBlocker(id: number): Promise<void>;
+
+  // Department Pulse
+  getDepartmentPulse(): Promise<DepartmentPulse[]>;
+  createDepartmentPulse(entry: InsertDepartmentPulse): Promise<DepartmentPulse>;
+  deleteDepartmentPulse(id: number): Promise<void>;
+
+  // Risks
+  getRisks(): Promise<Risk[]>;
+  createRisk(risk: InsertRisk): Promise<Risk>;
+  updateRisk(id: number, updates: Partial<InsertRisk>): Promise<Risk>;
+  deleteRisk(id: number): Promise<void>;
+
+  // LiveOps Logs
+  getLiveopsLogs(): Promise<LiveopsLog[]>;
+  createLiveopsLog(log: InsertLiveopsLog): Promise<LiveopsLog>;
+  deleteLiveopsLog(id: number): Promise<void>;
+
+  // Milestone Buffers
+  getMilestoneBuffers(): Promise<MilestoneBuffer[]>;
+  createMilestoneBuffer(buffer: InsertMilestoneBuffer): Promise<MilestoneBuffer>;
+  updateMilestoneBuffer(id: number, updates: Partial<InsertMilestoneBuffer>): Promise<MilestoneBuffer>;
+  deleteMilestoneBuffer(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -40,28 +61,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateTask(id: number, updates: UpdateTaskRequest): Promise<Task> {
-    const [updated] = await db
-      .update(tasks)
-      .set(updates)
-      .where(eq(tasks.id, id))
-      .returning();
+    const [updated] = await db.update(tasks).set(updates).where(eq(tasks.id, id)).returning();
     return updated;
-  }
-
-  async getBlockers(): Promise<Blocker[]> {
-    return await db.select().from(blockers);
-  }
-
-  async getPulseData(): Promise<PulseValue[]> {
-    return await db.select().from(pulseTracker);
-  }
-
-  async getRisks(): Promise<Risk[]> {
-    return await db.select().from(risks);
-  }
-
-  async getLiveOpsFeedback(): Promise<LiveOpsFeedback[]> {
-    return await db.select().from(liveOpsFeedback).orderBy(liveOpsFeedback.createdAt);
   }
 
   async createPhase(phase: Omit<Phase, "id">): Promise<Phase> {
@@ -74,24 +75,89 @@ export class DatabaseStorage implements IStorage {
     return newTask;
   }
 
-  async createBlocker(blocker: Omit<Blocker, "id">): Promise<Blocker> {
+  // Blockers
+  async getBlockers(): Promise<Blocker[]> {
+    return await db.select().from(blockers).orderBy(desc(blockers.createdAt));
+  }
+
+  async createBlocker(blocker: InsertBlocker): Promise<Blocker> {
     const [newBlocker] = await db.insert(blockers).values(blocker).returning();
     return newBlocker;
   }
 
-  async createPulse(pulse: Omit<PulseValue, "id">): Promise<PulseValue> {
-    const [newPulse] = await db.insert(pulseTracker).values(pulse).returning();
-    return newPulse;
+  async updateBlocker(id: number, updates: Partial<InsertBlocker & { resolvedAt: Date | null }>): Promise<Blocker> {
+    const [updated] = await db.update(blockers).set(updates as any).where(eq(blockers.id, id)).returning();
+    return updated;
   }
 
-  async createRisk(risk: Omit<Risk, "id">): Promise<Risk> {
+  async deleteBlocker(id: number): Promise<void> {
+    await db.delete(blockers).where(eq(blockers.id, id));
+  }
+
+  // Department Pulse
+  async getDepartmentPulse(): Promise<DepartmentPulse[]> {
+    return await db.select().from(departmentPulse).orderBy(departmentPulse.weekOf);
+  }
+
+  async createDepartmentPulse(entry: InsertDepartmentPulse): Promise<DepartmentPulse> {
+    const [newEntry] = await db.insert(departmentPulse).values(entry).returning();
+    return newEntry;
+  }
+
+  async deleteDepartmentPulse(id: number): Promise<void> {
+    await db.delete(departmentPulse).where(eq(departmentPulse.id, id));
+  }
+
+  // Risks
+  async getRisks(): Promise<Risk[]> {
+    return await db.select().from(risks).orderBy(desc(risks.createdAt));
+  }
+
+  async createRisk(risk: InsertRisk): Promise<Risk> {
     const [newRisk] = await db.insert(risks).values(risk).returning();
     return newRisk;
   }
 
-  async createLiveOps(feedback: Omit<LiveOpsFeedback, "id">): Promise<LiveOpsFeedback> {
-    const [newFeedback] = await db.insert(liveOpsFeedback).values(feedback).returning();
-    return newFeedback;
+  async updateRisk(id: number, updates: Partial<InsertRisk>): Promise<Risk> {
+    const [updated] = await db.update(risks).set(updates).where(eq(risks.id, id)).returning();
+    return updated;
+  }
+
+  async deleteRisk(id: number): Promise<void> {
+    await db.delete(risks).where(eq(risks.id, id));
+  }
+
+  // LiveOps Logs
+  async getLiveopsLogs(): Promise<LiveopsLog[]> {
+    return await db.select().from(liveopsLogs).orderBy(desc(liveopsLogs.createdAt));
+  }
+
+  async createLiveopsLog(log: InsertLiveopsLog): Promise<LiveopsLog> {
+    const [newLog] = await db.insert(liveopsLogs).values(log).returning();
+    return newLog;
+  }
+
+  async deleteLiveopsLog(id: number): Promise<void> {
+    await db.delete(liveopsLogs).where(eq(liveopsLogs.id, id));
+  }
+
+  // Milestone Buffers
+  async getMilestoneBuffers(): Promise<MilestoneBuffer[]> {
+    return await db.select().from(milestoneBuffers).orderBy(milestoneBuffers.id);
+  }
+
+  async createMilestoneBuffer(buffer: InsertMilestoneBuffer): Promise<MilestoneBuffer> {
+    const [newBuffer] = await db.insert(milestoneBuffers).values(buffer).returning();
+    return newBuffer;
+  }
+
+  async updateMilestoneBuffer(id: number, updates: Partial<InsertMilestoneBuffer>): Promise<MilestoneBuffer> {
+    const [updated] = await db.update(milestoneBuffers).set(updates).where(eq(milestoneBuffers.id, id)).returning();
+    return updated;
+  }
+
+  async deleteMilestoneBuffer(id: number): Promise<void> {
+    await db.delete(milestoneBuffers).where(eq(milestoneBuffers.id, id));
   }
 }
 

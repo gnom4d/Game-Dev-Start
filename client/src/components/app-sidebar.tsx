@@ -1,5 +1,8 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, FolderKanban, Activity, ShieldCheck, Rocket, LayoutTemplate, BoxSelect } from "lucide-react";
+import {
+  LayoutDashboard, FolderKanban, Activity, ShieldCheck, Rocket,
+  LayoutTemplate, BoxSelect, Flame, CalendarClock, Users, ShieldAlert
+} from "lucide-react";
 import { usePhases } from "@/hooks/use-phases";
 import {
   Sidebar,
@@ -14,7 +17,6 @@ import {
 } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 
-// Map standard phase names to icons for better visual representation
 const getPhaseIcon = (name: string) => {
   const lower = name.toLowerCase();
   if (lower.includes("concept")) return LightbulbIcon;
@@ -25,10 +27,17 @@ const getPhaseIcon = (name: string) => {
   return FolderKanban;
 };
 
-// Fallback icon component
 const LightbulbIcon = (props: any) => (
   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1.3.5 2.6 1.5 3.5.8.8 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>
 );
+
+const APM_TOOLS = [
+  { href: "/blockers",         label: "Blocker Heatmap",   icon: Flame },
+  { href: "/milestones",       label: "Milestone Buffers", icon: CalendarClock },
+  { href: "/department-pulse", label: "Department Pulse",  icon: Users },
+  { href: "/risks",            label: "Risk Register",     icon: ShieldAlert },
+  { href: "/liveops",          label: "LiveOps",           icon: Rocket },
+];
 
 export function AppSidebar() {
   const [location] = useLocation();
@@ -47,8 +56,9 @@ export function AppSidebar() {
           </div>
         </div>
       </SidebarHeader>
-      
+
       <SidebarContent className="pt-4">
+        {/* Overview */}
         <SidebarGroup>
           <SidebarGroupLabel className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Overview</SidebarGroupLabel>
           <SidebarGroupContent>
@@ -65,12 +75,12 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarGroup className="mt-6">
+        {/* Game Pipeline */}
+        <SidebarGroup className="mt-4">
           <SidebarGroupLabel className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Game Pipeline</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {isLoading ? (
-                // Loading Skeletons
                 Array.from({ length: 5 }).map((_, i) => (
                   <SidebarMenuItem key={i} className="mb-2">
                     <Skeleton className="h-8 w-full bg-sidebar-accent/50 rounded-lg" />
@@ -90,6 +100,25 @@ export function AppSidebar() {
                   </SidebarMenuItem>
                 );
               })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* APM Tools */}
+        <SidebarGroup className="mt-4">
+          <SidebarGroupLabel className="text-xs uppercase tracking-wider text-muted-foreground mb-2">APM Tools</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {APM_TOOLS.map(({ href, label, icon: Icon }) => (
+                <SidebarMenuItem key={href}>
+                  <SidebarMenuButton isActive={location === href} asChild className="hover-elevate">
+                    <Link href={href}>
+                      <Icon className="w-4 h-4" />
+                      <span className="font-medium">{label}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

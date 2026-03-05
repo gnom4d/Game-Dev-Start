@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -16,48 +16,65 @@ export const tasks = pgTable("tasks", {
   description: text("description").notNull(),
   apmGuidelines: text("apm_guidelines").notNull(),
   isCompleted: boolean("is_completed").default(false).notNull(),
-  isSlipping: boolean("is_slipping").default(false).notNull(),
-  milestoneBuffer: integer("milestone_buffer").default(0).notNull(),
 });
 
 export const blockers = pgTable("blockers", {
   id: serial("id").primaryKey(),
-  taskId: integer("task_id").notNull(),
+  phaseId: integer("phase_id").notNull(),
+  taskId: integer("task_id"),
   author: text("author").notNull(),
   source: text("source").notNull(),
-  severity: integer("severity").notNull(), // 1-5 for heatmap
-  createdAt: text("created_at").notNull(),
+  severity: text("severity").notNull().default("medium"),
+  resolvedAt: timestamp("resolved_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const pulseTracker = pgTable("pulse_tracker", {
+export const departmentPulse = pgTable("department_pulse", {
   id: serial("id").primaryKey(),
+  department: text("department").notNull(),
   phaseId: integer("phase_id").notNull(),
-  team: text("team").notNull(), // Art, Engineering, Marketing, QA
-  pulse: integer("pulse").notNull(), // 1-10
-  week: integer("week").notNull(),
+  score: integer("score").notNull(),
+  weekOf: text("week_of").notNull(),
+  notes: text("notes").default(""),
 });
 
 export const risks = pgTable("risks", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
-  notes: text("notes").notNull(),
+  description: text("description").notNull(),
   linkedPhaseId: integer("linked_phase_id"),
+  severity: text("severity").notNull().default("medium"),
+  status: text("status").notNull().default("open"),
+  notes: text("notes").default(""),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const liveOpsFeedback = pgTable("live_ops_feedback", {
+export const liveopsLogs = pgTable("liveops_logs", {
   id: serial("id").primaryKey(),
-  type: text("type").notNull(), // "player_feedback", "server_stability"
+  type: text("type").notNull(),
+  source: text("source").notNull(),
   content: text("content").notNull(),
-  healthScore: integer("health_score").notNull(), // 0-100
-  createdAt: text("created_at").notNull(),
+  severity: text("severity").notNull().default("info"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const milestoneBuffers = pgTable("milestone_buffers", {
+  id: serial("id").primaryKey(),
+  taskId: integer("task_id").notNull(),
+  productionPhaseId: integer("production_phase_id").notNull(),
+  slippingFromPhaseId: integer("slipping_from_phase_id").notNull(),
+  bufferDays: integer("buffer_days").notNull().default(0),
+  status: text("status").notNull().default("on-track"),
+  notes: text("notes").default(""),
 });
 
 export const insertPhaseSchema = createInsertSchema(phases).omit({ id: true });
 export const insertTaskSchema = createInsertSchema(tasks).omit({ id: true });
-export const insertBlockerSchema = createInsertSchema(blockers).omit({ id: true });
-export const insertPulseSchema = createInsertSchema(pulseTracker).omit({ id: true });
-export const insertRiskSchema = createInsertSchema(risks).omit({ id: true });
-export const insertLiveOpsFeedbackSchema = createInsertSchema(liveOpsFeedback).omit({ id: true });
+export const insertBlockerSchema = createInsertSchema(blockers).omit({ id: true, createdAt: true });
+export const insertDepartmentPulseSchema = createInsertSchema(departmentPulse).omit({ id: true });
+export const insertRiskSchema = createInsertSchema(risks).omit({ id: true, createdAt: true });
+export const insertLiveopsLogSchema = createInsertSchema(liveopsLogs).omit({ id: true, createdAt: true });
+export const insertMilestoneBufferSchema = createInsertSchema(milestoneBuffers).omit({ id: true });
 
 export type Phase = typeof phases.$inferSelect;
 export type InsertPhase = z.infer<typeof insertPhaseSchema>;
@@ -69,6 +86,14 @@ export type UpdateTaskRequest = Partial<InsertTask>;
 export type Blocker = typeof blockers.$inferSelect;
 export type InsertBlocker = z.infer<typeof insertBlockerSchema>;
 
-export type PulseValue = typeof pulseTracker.$inferSelect;
+export type DepartmentPulse = typeof departmentPulse.$inferSelect;
+export type InsertDepartmentPulse = z.infer<typeof insertDepartmentPulseSchema>;
+
 export type Risk = typeof risks.$inferSelect;
-export type LiveOpsFeedback = typeof liveOpsFeedback.$inferSelect;
+export type InsertRisk = z.infer<typeof insertRiskSchema>;
+
+export type LiveopsLog = typeof liveopsLogs.$inferSelect;
+export type InsertLiveopsLog = z.infer<typeof insertLiveopsLogSchema>;
+
+export type MilestoneBuffer = typeof milestoneBuffers.$inferSelect;
+export type InsertMilestoneBuffer = z.infer<typeof insertMilestoneBufferSchema>;
